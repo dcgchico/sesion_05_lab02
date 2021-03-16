@@ -1,0 +1,85 @@
+---
+- name: "Laboratorio de Bucles"
+  hosts: nodo_02
+  vars:
+    archivos:
+      - arch_01
+      - arch_02
+      - arch_03
+      - arch_04
+      - arch_05
+  vars_files:
+    "vars/default.yml"
+  tasks:
+    - name: "Instalar paquetes"
+      yum:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - zip
+        - unzip
+        - gzip 
+        - bzip2
+
+    - name: "Crear archivos"
+      file:
+        path: "/tmp/archivos_lab02/{{ item }}"
+        state: touch
+      loop: "{{ archivos }}"
+
+    - name: "Particionado"
+      parted:
+        device: "{{ item.value['dispositivo'] }}"
+        number: 1
+        flags: [ lvm ]
+        state: present
+      loop: "{{ discos|dict2items }}"
+
+    - name: "Creacion del VG"
+      lvg:
+        vg: "{{ item.value['volum_group'] }}"
+        pvs: "{{ item.value['volumen_fisico'] }}"
+        pesize: "{{ item.value['tamaño_vg'] }}"
+      loop: "{{ discos|dict2items }}"
+
+    - name: "Creacion del LV"
+      lvol:
+        vg: "{{ item.value['volum_group'] }}"
+        lv: "lv_{{ item.value['volum_group'] }}"
+        size: "{{ item.value['tamaño_lv'] }}"
+        resizefs: true
+        force: yes
+        state: present
+      loop: "{{ discos|dict2items }}"
+
+    - name: "Configuracion filesystem"
+      filesystem:
+        fstype: "{{ item.value['formato_fs'] }}"
+        dev: "/dev/mapper/{{ item.value['volum_group'] }}-lv_{{ item.value['volum_group'] }}"
+      loop: "{{ discos|dict2items }}"
+
+    - name: "Creacion ruta de montaje"
+      file:
+        path: "{{ item.value['punto_montaje'] }}"
+        mode: 0765
+        recurse: yes
+        state: directory
+      loop: "{{ discos|dict2items }}"
+
+    - name: "Montaje del sistema de ficheros"
+      mount:
+        path: "{{ item.value['punto_montaje'] }}"
+        src: "/dev/mapper/{{ item.value['volum_group'] }}-lv_{{ item.value['volum_group'] }}"
+        fstype: "{{ item.value['formato_fs'] }}"
+        state: present
+      loop: "{{ discos|dict2items }}"
+    
+    - name: "Comprime archivos"
+      archive:
+        path: "/tmp/archivos_lab02/"
+        dest: "/mnt/disco02/archivos.zip"
+        format: zip
+        # Listar el contenido:
+        # zip -sf archivo.zip
+
+...
